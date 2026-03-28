@@ -20,5 +20,8 @@ async def telegram_webhook(
         raise HTTPException(status_code=403, detail="Invalid secret")
 
     update_data = await request.json()
-    await bot_manager.process_update(bot_token, update_data)
+    try:
+        await bot_manager.process_update(bot_token, update_data)
+    except Exception as e:
+        logger.exception(f"Error processing update: {e}")
     return {"ok": True}
