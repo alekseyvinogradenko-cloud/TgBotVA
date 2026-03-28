@@ -36,7 +36,9 @@ async def lifespan(app: FastAPI):
         for ws in workspaces_list:
             try:
                 await bot_manager.register_bot(ws.telegram_bot_token, str(ws.id))
-                logger.info(f"Loaded bot for workspace: {ws.name}")
+                webhook_url = f"{settings.webhook_base_url}/webhook/{ws.telegram_bot_token}"
+                await bot_manager.set_webhook(ws.telegram_bot_token, webhook_url, settings.webhook_secret)
+                logger.info(f"Loaded bot and set webhook for workspace: {ws.name}")
             except Exception as e:
                 logger.error(f"Failed to load bot {ws.name}: {e}")
 
