@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID
 
 from aiogram import Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
@@ -458,9 +458,6 @@ async def go_main_menu(callback: CallbackQuery, state: FSMContext):
 
 # ─── Free text → AI task ──────────────────────────────────────────────────────
 
-@router.message(F.text & ~F.text.startswith("/"))
+@router.message(F.text & ~F.text.startswith("/"), StateFilter(None))
 async def handle_free_text(message: Message, state: FSMContext, workspace_id: str):
-    current_state = await state.get_state()
-    if current_state:
-        return
     await start_add_task(message, state)
