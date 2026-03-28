@@ -1,18 +1,18 @@
 """
-AI service — parses free-text input into structured task data using GPT.
+AI service — parses free-text input into structured task data using Claude.
 """
 import json
 import logging
 from datetime import datetime
 from typing import Optional
 
-from openai import AsyncOpenAI
+import anthropic
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-client = AsyncOpenAI(api_key=settings.openai_api_key)
+client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
 PARSE_TASK_PROMPT = """
 You are a task parsing assistant. Extract task information from user input.
@@ -36,12 +36,13 @@ async def parse_task_from_text(
     model: str = None,
 ) -> dict:
     """Parse free text into a structured task dict."""
-    model = model or settings.openai_model
+    model = model or settings.anthropic_model
     today = datetime.now().strftime("%Y-%m-%d %A")
 
     try:
-        response = await client.chat.completions.create(
+        response = await client.messages.create(
             model=model,
+            max_tokens=512,
             messages=[
                 {
                     "role": "user",
@@ -50,14 +51,11 @@ async def parse_task_from_text(
                     ),
                 }
             ],
-            temperature=0.1,
-            max_tokens=512,
         )
-        raw = response.choices[0].message.content.strip()
+        raw = response.content[0].text.strip()
         return json.loads(raw)
     except Exception as e:
         logger.error(f"AI parse error: {e}")
-        # Fallback — return raw text as title
         return {"title": user_input, "priority": "medium"}
 
 
@@ -79,12 +77,13 @@ Respond ONLY with valid JSON array.
 
 async def prioritize_tasks(tasks: list[dict], model: str = None) -> list[dict]:
     """AI-powered task prioritization."""
-    model = model or settings.openai_model
+    model = model or settings.anthropic_model
     today = datetime.now().strftime("%Y-%m-%d")
 
     try:
-        response = await client.chat.completions.create(
+        response = await client.messages.create(
             model=model,
+            max_tokens=1024,
             messages=[
                 {
                     "role": "user",
@@ -94,10 +93,8 @@ async def prioritize_tasks(tasks: list[dict], model: str = None) -> list[dict]:
                     ),
                 }
             ],
-            temperature=0.2,
-            max_tokens=1024,
         )
-        raw = response.choices[0].message.content.strip()
+        raw = response.content[0].text.strip()
         return json.loads(raw)
     except Exception as e:
         logger.error(f"AI prioritize error: {e}")

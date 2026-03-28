@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     supabase_url: str
     supabase_service_key: str
 
-    # OpenAI
-    openai_api_key: str
-    openai_model: str = "gpt-4o"
+    # Anthropic
+    anthropic_api_key: str
+    anthropic_model: str = "claude-opus-4-6"
 
     # Telegram
     webhook_base_url: str
