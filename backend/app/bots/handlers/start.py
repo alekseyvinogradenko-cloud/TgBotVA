@@ -2,6 +2,7 @@ from uuid import UUID
 
 from aiogram import Router
 from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 from app.db.session import AsyncSessionLocal
@@ -14,7 +15,8 @@ router = Router()
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, workspace_id: str):
+async def cmd_start(message: Message, workspace_id: str, state: FSMContext):
+    await state.clear()
     async with AsyncSessionLocal() as session:
         user_repo = UserRepository(session)
         user, created = await user_repo.get_or_create(
