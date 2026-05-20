@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import TmaSession, get_tma_session
 from app.db.session import get_db
 from app.db.models import Project
 from app.db.repositories import ProjectRepository
@@ -45,6 +46,27 @@ async def get_workspace_projects(
 ):
     repo = ProjectRepository(db)
     return await repo.get_workspace_projects(workspace_id)
+
+
+# ─── TMA endpoints ────────────────────────────────────────────────────────────
+
+class ProjectMiniResponse(BaseModel):
+    id: UUID
+    name: str
+    color: str
+    description: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+@router.get("/mine", response_model=list[ProjectMiniResponse])
+async def get_my_workspace_projects(
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return active projects in the caller's current workspace."""
+    repo = ProjectRepository(db)
+    return await repo.get_workspace_projects(session.workspace_id)
 
 
 @router.post("/", response_model=ProjectResponse, status_code=201)

@@ -10,6 +10,7 @@ import {
 import { authenticate, type AuthResponse } from "@/lib/tmaAuth";
 import { useMyTasks, type TmaTask } from "@/lib/useTmaTasks";
 import { useTgMainButton } from "@/lib/useTgMainButton";
+import { CreateTaskSheet } from "./_components/CreateTaskSheet";
 
 type Status = "loading" | "ready" | "error";
 
@@ -154,14 +155,18 @@ function TaskBoard({
   }, [tasks]);
   const overdueCount = tasks.filter((t) => t.is_overdue).length;
 
-  // TG MainButton — opens create-task flow (Stage 3 will wire this)
+  // Sheet for new-task flow
+  const [sheetOpen, setSheetOpen] = useState(false);
+
+  // TG MainButton — opens create-task flow (hides while sheet is open since
+  // the sheet has its own Save/Cancel footer)
   useTgMainButton({
     text: "+ Новая задача",
-    visible: true,
+    visible: !sheetOpen,
     onClick: () => {
       const tg = getTelegram();
       tg?.HapticFeedback?.impactOccurred("light");
-      alert("Создание задачи — в следующем этапе");
+      setSheetOpen(true);
     },
     color: "#6ab2f2",
     textColor: "#ffffff",
@@ -251,6 +256,12 @@ function TaskBoard({
             ))}
         </div>
       </div>
+
+      <CreateTaskSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onCreated={refetch}
+      />
 
       {/* Sticky project filter chips */}
       {projects.length > 0 && (

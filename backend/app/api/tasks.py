@@ -11,8 +11,9 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import TmaSession, get_tma_session
 from app.db.session import get_db
-from app.db.models import Project, Task, TaskStatus, TaskPriority
+from app.db.models import Project, Task, TaskStatus, TaskPriority, User
 from app.db.repositories import TaskRepository, ProjectRepository
+from app.services.ai_service import parse_task_from_text
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
@@ -83,6 +84,107 @@ def _initials(first_name: str, last_name: Optional[str]) -> str:
     s = (f[:1] + (l[:1] if l else "")).upper()
     return s or "—"
 
+
+# ─── Parse free-text via AI ───────────────────────────────────────────────────
+
+class ParseTaskRequest(BaseModel):
+    text: str
+
+
+class ParseTaskResponse(BaseModel):
+    title: str
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    priority: TaskPriority = TaskPriority.MEDIUM
+    project_hint: Optional[str] = None
+
+
+@router.post("/parse", response_model=ParseTaskResponse)
+async def parse_task_text(
+    body: ParseTaskRequest,
+    session: TmaSession = Depends(get_tma_session),
+):
+    """Run user text through the AI parser using their preferred model."""
+    parsed = await parse_task_from_text(body.text, model=session.user.ai_model)
+
+    due: Optional[datetime] = None
+    if parsed.get("due_date"):
+        try:
+            due = datetime.fromisoformat(str(parsed["due_date"]).replace("Z", "+00:00"))
+        except (ValueError, TypeError):
+            due = None
+
+    try:
+        priority = TaskPriority(parsed.get("priority", "medium"))
+    except ValueError:
+        priority = TaskPriority.MEDIUM
+
+    return ParseTaskResponse(
+        title=str(parsed.get("title") or body.text)[:512],
+        description=parsed.get("description"),
+        due_date=due,
+        priority=priority,
+        project_hint=parsed.get("project_hint"),
+    )
+
+
+# ─── Create task (TMA-authed) ─────────────────────────────────────────────────
+
+class TmaCreateTaskRequest(BaseModel):
+    project_id: UUID
+    title: str
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    priority: TaskPriority = TaskPriority.MEDIUM
+    assignee_id: Optional[UUID] = None  # default = creator (Stage 5 wires picker)
+
+
+@router.post("/create", response_model=TaskListItem, status_code=201)
+async def create_task_tma(
+    body: TmaCreateTaskRequest,
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify project belongs to caller's workspace
+    project = await db.get(Project, body.project_id)
+    if not project or project.workspace_id != session.workspace_id:
+        raise HTTPException(404, "Project not found in this workspace")
+
+    task = Task(
+        project_id=body.project_id,
+        creator_id=session.user.id,
+        assignee_id=body.assignee_id or session.user.id,
+        title=body.title.strip(),
+        description=body.description,
+        priority=body.priority,
+        due_date=body.due_date,
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+
+    assignee = await db.get(User, task.assignee_id) if task.assignee_id else None
+    now = datetime.now(timezone.utc)
+    is_overdue = bool(task.due_date and task.due_date < now and task.status != TaskStatus.DONE)
+
+    return TaskListItem(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        status=task.status,
+        priority=task.priority,
+        due_date=task.due_date,
+        project=ProjectMini(id=project.id, name=project.name, color=project.color),
+        assignee=AssigneeMini(
+            id=assignee.id,
+            first_name=assignee.first_name,
+            initials=_initials(assignee.first_name, assignee.last_name),
+        ) if assignee else None,
+        is_overdue=is_overdue,
+    )
+
+
+# ─── List ────────────────────────────────────────────────────────────────────
 
 @router.get("/mine", response_model=list[TaskListItem])
 async def get_my_tasks(
