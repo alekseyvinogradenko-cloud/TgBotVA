@@ -48,10 +48,12 @@ class BotManager:
 
     async def set_webhook(self, token: str, webhook_url: str, secret: str) -> None:
         bot, _ = self._bots[token]
+        # drop_pending_updates=False: keep updates queued during a redeploy so
+        # the new instance picks them up instead of losing them.
         await bot.set_webhook(
             url=webhook_url,
             secret_token=secret,
-            drop_pending_updates=True,
+            drop_pending_updates=False,
         )
 
     async def delete_webhook(self, token: str) -> None:
@@ -60,8 +62,14 @@ class BotManager:
             await bot.delete_webhook()
 
     async def unregister_bot(self, token: str) -> None:
+        # Intentionally do NOT call delete_webhook here. Render redeploys
+        # shut down the old container and bring up a new one within seconds;
+        # if we drop the webhook on Telegram side, the new container has to
+        # re-register it on startup. That re-registration was failing silently
+        # (rate-limit / transient network), leaving the bot unreachable until
+        # someone re-set the webhook manually. Keeping the same URL means
+        # Telegram just retries delivery to the next-live instance.
         if token in self._bots:
-            await self.delete_webhook(token)
             bot, _ = self._bots.pop(token)
             await bot.session.close()
 
