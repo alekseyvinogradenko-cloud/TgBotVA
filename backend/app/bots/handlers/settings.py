@@ -14,9 +14,9 @@ from app.db.repositories import UserRepository
 router = Router()
 
 AI_MODELS = [
-    ("gpt-4o", "GPT-4o (умный, дорогой)"),
-    ("gpt-4o-mini", "GPT-4o Mini (быстрый, дешёвый)"),
-    ("gpt-3.5-turbo", "GPT-3.5 Turbo (базовый)"),
+    ("claude-haiku-4-5-20251001", "Claude Haiku 4.5 (быстрый, дешёвый)"),
+    ("claude-sonnet-4-6", "Claude Sonnet 4.6 (баланс)"),
+    ("claude-opus-4-7", "Claude Opus 4.7 (самый умный)"),
 ]
 
 

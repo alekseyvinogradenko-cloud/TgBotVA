@@ -14,6 +14,20 @@ logger = logging.getLogger(__name__)
 
 client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
 
+CLAUDE_MODELS = {
+    "claude-haiku-4-5-20251001",
+    "claude-sonnet-4-6",
+    "claude-opus-4-7",
+}
+
+
+def _resolve_model(model: Optional[str]) -> str:
+    """Fall back to settings default if model is unknown or unset."""
+    if model and model in CLAUDE_MODELS:
+        return model
+    return settings.anthropic_model
+
+
 PARSE_TASK_PROMPT = """
 You are a task parsing assistant. Extract task information from user input.
 Today's date: {today}
@@ -33,10 +47,10 @@ Respond ONLY with valid JSON, no markdown.
 
 async def parse_task_from_text(
     user_input: str,
-    model: str = None,
+    model: Optional[str] = None,
 ) -> dict:
     """Parse free text into a structured task dict."""
-    model = model or settings.anthropic_model
+    model = _resolve_model(model)
     today = datetime.now().strftime("%Y-%m-%d %A")
 
     try:
@@ -75,9 +89,9 @@ Respond ONLY with valid JSON array.
 """
 
 
-async def prioritize_tasks(tasks: list[dict], model: str = None) -> list[dict]:
+async def prioritize_tasks(tasks: list[dict], model: Optional[str] = None) -> list[dict]:
     """AI-powered task prioritization."""
-    model = model or settings.anthropic_model
+    model = _resolve_model(model)
     today = datetime.now().strftime("%Y-%m-%d")
 
     try:

@@ -101,7 +101,12 @@ async def process_task_text(message: Message, state: FSMContext, workspace_id: s
     user_input = message.text.strip()
     await message.answer("🤖 Анализирую задачу...")
 
-    parsed = await parse_task_from_text(user_input)
+    async with AsyncSessionLocal() as session:
+        user_repo = UserRepository(session)
+        user = await user_repo.get_by_telegram_id(message.from_user.id)
+    user_model = user.ai_model if user else None
+
+    parsed = await parse_task_from_text(user_input, model=user_model)
     await state.update_data(parsed=parsed)
 
     due_str = ""

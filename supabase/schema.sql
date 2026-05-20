@@ -26,7 +26,7 @@ CREATE TABLE users (
     notify_weekly_day INTEGER DEFAULT 1,
     notify_deadline_before_hours INTEGER DEFAULT 24,
     timezone VARCHAR(64) DEFAULT 'Europe/Moscow',
-    ai_model VARCHAR(64) DEFAULT 'gpt-4o',
+    ai_model VARCHAR(64) DEFAULT 'claude-haiku-4-5-20251001',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

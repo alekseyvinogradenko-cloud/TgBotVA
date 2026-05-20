@@ -78,8 +78,8 @@ class User(Base):
     notify_deadline_before_hours = Column(Integer, default=24)
     timezone = Column(String(64), default="Europe/Moscow")
 
-    # OpenAI model preference
-    ai_model = Column(String(64), default="gpt-4o")
+    # Anthropic Claude model preference
+    ai_model = Column(String(64), default="claude-haiku-4-5-20251001")
 
     memberships = relationship("WorkspaceMember", back_populates="user", cascade="all, delete-orphan")
     assigned_tasks = relationship("Task", foreign_keys="Task.assignee_id", back_populates="assignee")
