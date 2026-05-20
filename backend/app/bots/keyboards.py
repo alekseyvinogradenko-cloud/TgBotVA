@@ -10,19 +10,26 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.core.config import settings
 
 
-def webapp_url(workspace_id: str) -> str:
-    """Build the Mini App URL for a given workspace."""
-    base = settings.frontend_url.rstrip("/")
+def webapp_url(workspace_id: str) -> Optional[str]:
+    """Build the Mini App URL for a given workspace.
+
+    Returns None if FRONTEND_URL is missing or not HTTPS — Telegram rejects
+    HTTP web_app URLs, so it's better to skip the button than to crash on send.
+    """
+    base = (settings.frontend_url or "").rstrip("/")
+    if not base.startswith("https://"):
+        return None
     return f"{base}/app?ws={workspace_id}"
 
 
 def main_menu_keyboard(workspace_id: Optional[str] = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    if workspace_id:
+    url = webapp_url(workspace_id) if workspace_id else None
+    if url:
         builder.row(
             InlineKeyboardButton(
                 text="📱 Открыть приложение",
-                web_app=WebAppInfo(url=webapp_url(workspace_id)),
+                web_app=WebAppInfo(url=url),
             )
         )
     builder.row(
