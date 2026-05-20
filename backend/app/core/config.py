@@ -18,7 +18,7 @@ class Settings(BaseSettings):
 
     # Anthropic
     anthropic_api_key: str
-    anthropic_model: str = "claude-haiku-4-5-20251001"
+    anthropic_model: str = "claude-sonnet-4-6"
 
     # Telegram
     webhook_base_url: str
