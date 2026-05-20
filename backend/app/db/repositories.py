@@ -46,6 +46,12 @@ class UserRepository(BaseRepository[User]):
     async def get_or_create(self, telegram_id: int, **kwargs) -> tuple[User, bool]:
         user = await self.get_by_telegram_id(telegram_id)
         if user:
+            # Refresh display fields if Telegram now reports different values
+            # (handles users initially created with placeholder names via REST API)
+            for field in ("first_name", "last_name", "telegram_username", "language_code"):
+                new_val = kwargs.get(field)
+                if new_val and getattr(user, field) != new_val:
+                    setattr(user, field, new_val)
             return user, False
         user = User(telegram_id=telegram_id, **kwargs)
         await self.save(user)
