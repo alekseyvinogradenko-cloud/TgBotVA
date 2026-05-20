@@ -10,7 +10,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import Update
+from aiogram.types import MenuButtonWebApp, Update, WebAppInfo
 
 from app.bots.handlers import register_all_handlers
 
@@ -60,6 +60,16 @@ class BotManager:
         if token in self._bots:
             bot, _ = self._bots[token]
             await bot.delete_webhook()
+
+    async def set_menu_button(self, token: str, text: str, url: str) -> None:
+        """Pin the 'Open Mini App' button to the bottom-left of every chat with this bot.
+
+        Persists on Telegram side — set once per deploy, shows for all users.
+        """
+        bot, _ = self._bots[token]
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(text=text, web_app=WebAppInfo(url=url)),
+        )
 
     async def unregister_bot(self, token: str) -> None:
         # Intentionally do NOT call delete_webhook here. Render redeploys

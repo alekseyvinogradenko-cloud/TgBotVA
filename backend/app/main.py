@@ -39,6 +39,21 @@ async def lifespan(app: FastAPI):
                 webhook_url = f"{settings.webhook_base_url}/webhook/{ws.telegram_bot_token}"
                 await bot_manager.set_webhook(ws.telegram_bot_token, webhook_url, settings.webhook_secret)
                 logger.info(f"Loaded bot and set webhook for workspace: {ws.name}")
+
+                # Pin the persistent 'Open Mini App' menu button (bottom-left
+                # of chat input). Only when FRONTEND_URL is HTTPS — Telegram
+                # rejects http:// URLs for web apps.
+                frontend = (settings.frontend_url or "").rstrip("/")
+                if frontend.startswith("https://"):
+                    try:
+                        await bot_manager.set_menu_button(
+                            ws.telegram_bot_token,
+                            text="📱 Открыть",
+                            url=f"{frontend}/app?ws={ws.id}",
+                        )
+                        logger.info(f"Set menu button for {ws.name}")
+                    except Exception as e:
+                        logger.warning(f"Failed to set menu button for {ws.name}: {e}")
             except Exception as e:
                 logger.error(f"Failed to load bot {ws.name}: {e}")
 
