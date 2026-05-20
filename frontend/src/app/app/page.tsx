@@ -98,7 +98,7 @@ function CenterStatus({ text, tone }: { text: string; tone?: "error" }) {
       <div
         style={{
           fontSize: 14,
-          color: tone === "error" ? "#ff7878" : "var(--tg-hint, #8b8d94)",
+          color: tone === "error" ? "#ff7878" : "#8b8d94",
           textAlign: "center",
           maxWidth: 320,
           lineHeight: 1.5,
@@ -173,8 +173,8 @@ function TaskBoard({
         display: "flex",
         flexDirection: "column",
         minHeight: "100vh",
-        background: "var(--tg-bg, #17181c)",
-        color: "var(--tg-text, #ffffff)",
+        background: "#17181c",
+        color: "#ffffff",
       }}
     >
       {/* Scrollable content */}
@@ -194,7 +194,7 @@ function TaskBoard({
           <div
             style={{
               fontSize: 13,
-              color: "var(--tg-hint, #8b8d94)",
+              color: "#8b8d94",
               marginTop: 2,
             }}
           >
@@ -206,7 +206,7 @@ function TaskBoard({
               </>
             )}
             {workspaceName && (
-              <span style={{ color: "var(--tg-hint, #8b8d94)" }}>
+              <span style={{ color: "#8b8d94" }}>
                 {" · "}
                 {workspaceName}
               </span>
@@ -215,7 +215,7 @@ function TaskBoard({
         </header>
 
         {loading && (
-          <div style={{ padding: "16px 18px", color: "var(--tg-hint, #8b8d94)", fontSize: 13 }}>
+          <div style={{ padding: "16px 18px", color: "#8b8d94", fontSize: 13 }}>
             Загружаю задачи…
           </div>
         )}
@@ -225,14 +225,14 @@ function TaskBoard({
             style={{
               margin: "14px 14px",
               padding: 16,
-              background: "var(--tg-secondary-bg, #22232a)",
+              background: "#22232a",
               borderRadius: 14,
               fontSize: 13,
               lineHeight: 1.6,
-              color: "var(--tg-hint, #8b8d94)",
+              color: "#8b8d94",
             }}
           >
-            <div style={{ color: "var(--tg-text, #fff)", fontWeight: 600, marginBottom: 4 }}>
+            <div style={{ color: "#ffffff", fontWeight: 600, marginBottom: 4 }}>
               Пусто 🎉
             </div>
             Активных задач нет. Жми «+ Новая задача» внизу, чтобы добавить.
@@ -362,7 +362,7 @@ function TaskCard({ task }: { task: TmaTask }) {
       style={{
         margin: "0 0 8px",
         padding: "13px 14px",
-        background: "var(--tg-secondary-bg, #22232a)",
+        background: "#22232a",
         borderRadius: 14,
         borderLeft: inProgress ? "3px solid #6ab2f2" : "3px solid transparent",
       }}
@@ -387,24 +387,24 @@ function TaskCard({ task }: { task: TmaTask }) {
               style={{
                 width: 5,
                 height: 5,
-                background: "var(--tg-secondary-bg, #22232a)",
+                background: "#22232a",
                 borderRadius: "50%",
               }}
             />
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13, color: "var(--tg-text, #fff)", fontWeight: 500 }}>
+          <div style={{ fontSize: 13, color: "#ffffff", fontWeight: 500 }}>
             {task.title}
           </div>
           <div style={{ display: "flex", gap: 7, marginTop: 5, alignItems: "center", flexWrap: "wrap" }}>
             {task.due_date && (
-              <span style={{ fontSize: 10, color: "var(--tg-hint, #8b8d94)" }}>
+              <span style={{ fontSize: 10, color: "#8b8d94" }}>
                 🕐 {formatDueRelative(task.due_date)}
               </span>
             )}
             {task.due_date && (
-              <span style={{ fontSize: 10, color: "var(--tg-hint, #8b8d94)" }}>·</span>
+              <span style={{ fontSize: 10, color: "#8b8d94" }}>·</span>
             )}
             <span
               style={{
@@ -412,7 +412,7 @@ function TaskCard({ task }: { task: TmaTask }) {
                 alignItems: "center",
                 gap: 4,
                 fontSize: 10,
-                color: "var(--tg-hint, #8b8d94)",
+                color: "#8b8d94",
               }}
             >
               <span

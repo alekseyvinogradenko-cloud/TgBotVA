@@ -17,8 +17,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div
         style={{
           minHeight: "100vh",
-          background: "var(--tg-bg, #17181c)",
-          color: "var(--tg-text, #ffffff)",
+          background: "#17181c",
+          color: "#ffffff",
           fontFamily:
             "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, sans-serif",
         }}
