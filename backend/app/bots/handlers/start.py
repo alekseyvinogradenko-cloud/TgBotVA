@@ -47,13 +47,11 @@ async def cmd_start(message: Message, workspace_id: str, state: FSMContext):
     greeting = "Добро пожаловать" if created else "С возвращением"
     await message.answer(
         f"{greeting}, <b>{message.from_user.first_name}</b>! 👋\n\n"
-        "Я твой персональный ассистент. Вот что я умею:\n\n"
-        "📋 Управлять задачами и проектами\n"
-        "🔔 Напоминать о дедлайнах\n"
-        "🤖 Понимать задачи из обычного текста\n"
-        "📊 Присылать дайджесты\n\n"
-        "Выбери действие:",
-        reply_markup=main_menu_keyboard(),
+        "Я твой персональный ассистент. Удобнее всего работать через приложение — "
+        "там полный обзор задач, проектов и команды.\n\n"
+        "📱 Жми «<b>Открыть приложение</b>» ниже.\n\n"
+        "В чате тоже доступны базовые команды и уведомления о дедлайнах.",
+        reply_markup=main_menu_keyboard(workspace_id=workspace_id),
     )
 
 

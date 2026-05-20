@@ -1,13 +1,30 @@
 """Reusable keyboard builders."""
+from typing import Optional
+
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
-    ReplyKeyboardMarkup, KeyboardButton,
+    ReplyKeyboardMarkup, KeyboardButton, WebAppInfo,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.core.config import settings
 
-def main_menu_keyboard() -> InlineKeyboardMarkup:
+
+def webapp_url(workspace_id: str) -> str:
+    """Build the Mini App URL for a given workspace."""
+    base = settings.frontend_url.rstrip("/")
+    return f"{base}/app?ws={workspace_id}"
+
+
+def main_menu_keyboard(workspace_id: Optional[str] = None) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
+    if workspace_id:
+        builder.row(
+            InlineKeyboardButton(
+                text="📱 Открыть приложение",
+                web_app=WebAppInfo(url=webapp_url(workspace_id)),
+            )
+        )
     builder.row(
         InlineKeyboardButton(text="📋 Мои задачи", callback_data="tasks:my"),
         InlineKeyboardButton(text="➕ Добавить", callback_data="tasks:add"),
