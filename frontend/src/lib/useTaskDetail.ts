@@ -55,6 +55,7 @@ export function useEditTask(taskId: string | null) {
       description?: string | null;
       due_date?: string | null;
       priority?: TaskPriority;
+      assignee_id?: string;
     }) => {
       await tmaApi.post(`/tasks/${taskId}/update`, patch);
     },

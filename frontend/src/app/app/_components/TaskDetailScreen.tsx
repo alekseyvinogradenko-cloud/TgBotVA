@@ -9,6 +9,7 @@ import {
   useAddSubtask,
   useAddNote,
 } from "@/lib/useTaskDetail";
+import { useMembers, avatarColor } from "@/lib/useMembers";
 import type { TaskPriority, TaskStatus } from "@/lib/useTmaTasks";
 
 const STATUS_LABEL: Record<TaskStatus, { label: string; color: string; icon: string }> = {
@@ -38,6 +39,7 @@ export function TaskDetailScreen({
   const deleteTask = useDeleteTask(taskId);
   const addSubtask = useAddSubtask(taskId);
   const addNote = useAddNote(taskId);
+  const members = useMembers(true);
 
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -231,6 +233,58 @@ export function TaskDetailScreen({
           }}
         />
       </Section>
+
+      {/* Assignee — reassign (only if >1 member) */}
+      {members.data && members.data.length > 1 && (
+        <Section title="Исполнитель">
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {members.data.map((m) => {
+              const selected = task.assignee?.id === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    if (selected) return;
+                    haptic("light");
+                    editTask.mutate({ assignee_id: m.id });
+                  }}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "7px 12px",
+                    borderRadius: 14,
+                    border: "none",
+                    cursor: "pointer",
+                    fontSize: 12,
+                    background: selected ? "#6ab2f2" : "#2a2c33",
+                    color: selected ? "#fff" : "#c0c2c7",
+                    fontWeight: selected ? 600 : 400,
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: "50%",
+                      background: avatarColor(m.id),
+                      color: "#fff",
+                      fontSize: 8,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontWeight: 600,
+                    }}
+                  >
+                    {m.initials}
+                  </span>
+                  {m.is_me ? "Я" : m.first_name}
+                </button>
+              );
+            })}
+          </div>
+        </Section>
+      )}
 
       {/* Delete */}
       <div style={{ padding: "20px 18px 32px" }}>

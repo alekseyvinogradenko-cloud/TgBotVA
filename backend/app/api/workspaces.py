@@ -3,15 +3,61 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from app.api.deps import TmaSession, get_tma_session
 from app.core.config import settings
 from app.db.session import get_db
-from app.db.models import Workspace, WorkspaceMember, UserRole, WorkspaceType
+from app.db.models import User, Workspace, WorkspaceMember, UserRole, WorkspaceType
 from app.db.repositories import WorkspaceRepository, UserRepository
 from app.bots.manager import bot_manager
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
+
+
+# ─── TMA: members of caller's workspace (for assignee picker) ──────────────────
+
+class MemberItem(BaseModel):
+    id: UUID
+    first_name: str
+    initials: str
+    role: str
+    is_me: bool
+
+
+@router.get("/members", response_model=list[MemberItem])
+async def get_my_workspace_members(
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(WorkspaceMember)
+        .options(selectinload(WorkspaceMember.user))
+        .where(WorkspaceMember.workspace_id == session.workspace_id)
+    )
+    members = result.scalars().all()
+    items: list[MemberItem] = []
+    for m in members:
+        u = m.user
+        if not u:
+            continue
+        f = (u.first_name or "").strip()
+        l = (u.last_name or "").strip()
+        initials = (f[:1] + (l[:1] if l else "")).upper() or "—"
+        items.append(
+            MemberItem(
+                id=u.id,
+                first_name=u.first_name,
+                initials=initials,
+                role=m.role.value if m.role else "executor",
+                is_me=(u.id == session.user.id),
+            )
+        )
+    # Caller first, then alphabetical
+    items.sort(key=lambda x: (not x.is_me, x.first_name.lower()))
+    return items
 
 
 class CreateWorkspaceRequest(BaseModel):

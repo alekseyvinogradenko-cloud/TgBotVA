@@ -10,12 +10,50 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import TmaSession, get_tma_session
+from app.bots.manager import bot_manager
 from app.db.session import get_db
-from app.db.models import Note, Project, Task, TaskStatus, TaskPriority, User
+from app.db.models import Note, Project, Task, TaskStatus, TaskPriority, User, Workspace
 from app.db.repositories import TaskRepository, ProjectRepository
 from app.services.ai_service import parse_task_from_text
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
+
+
+async def _notify_assignee(
+    db: AsyncSession,
+    workspace_id: UUID,
+    assignee: Optional[User],
+    actor: User,
+    task_title: str,
+    reassigned: bool = False,
+) -> None:
+    """DM the assignee that a task was (re)assigned to them. No-op for self-assignment."""
+    if not assignee or assignee.id == actor.id:
+        return
+    ws = await db.get(Workspace, workspace_id)
+    if not ws:
+        return
+    verb = "переназначена" if reassigned else "назначена"
+    text = (
+        f"📬 <b>Тебе {verb} задача</b>\n\n"
+        f"📋 {task_title}\n"
+        f"👤 От: {actor.first_name}"
+    )
+    await bot_manager.send_message(ws.telegram_bot_token, assignee.telegram_id, text)
+
+
+async def _assert_member(db: AsyncSession, workspace_id: UUID, user_id: Optional[UUID]) -> None:
+    """Reject assignee_id that isn't a member of the workspace."""
+    if user_id is None:
+        return
+    from app.db.models import WorkspaceMember
+    res = await db.execute(
+        select(WorkspaceMember)
+        .where(WorkspaceMember.workspace_id == workspace_id)
+        .where(WorkspaceMember.user_id == user_id)
+    )
+    if not res.scalar_one_or_none():
+        raise HTTPException(400, "Assignee is not a member of this workspace")
 
 
 class TaskCreate(BaseModel):
@@ -150,6 +188,8 @@ async def create_task_tma(
     if not project or project.workspace_id != session.workspace_id:
         raise HTTPException(404, "Project not found in this workspace")
 
+    await _assert_member(db, session.workspace_id, body.assignee_id)
+
     task = Task(
         project_id=body.project_id,
         creator_id=session.user.id,
@@ -164,6 +204,7 @@ async def create_task_tma(
     await db.refresh(task)
 
     assignee = await db.get(User, task.assignee_id) if task.assignee_id else None
+    await _notify_assignee(db, session.workspace_id, assignee, session.user, task.title)
     now = datetime.now(timezone.utc)
     is_overdue = bool(task.due_date and task.due_date < now and task.status != TaskStatus.DONE)
 
@@ -344,6 +385,7 @@ class TaskEdit(BaseModel):
     description: Optional[str] = None
     due_date: Optional[datetime] = None
     priority: Optional[TaskPriority] = None
+    assignee_id: Optional[UUID] = None
 
 
 @router.post("/{task_id}/update", status_code=204)
@@ -363,7 +405,19 @@ async def edit_task(
         task.due_date = data["due_date"]
     if "priority" in data and data["priority"]:
         task.priority = data["priority"]
+
+    reassigned_to: Optional[User] = None
+    if "assignee_id" in data and data["assignee_id"] and data["assignee_id"] != task.assignee_id:
+        await _assert_member(db, session.workspace_id, data["assignee_id"])
+        task.assignee_id = data["assignee_id"]
+        reassigned_to = await db.get(User, data["assignee_id"])
+
     await db.commit()
+
+    if reassigned_to:
+        await _notify_assignee(
+            db, session.workspace_id, reassigned_to, session.user, task.title, reassigned=True
+        )
 
 
 @router.post("/{task_id}/delete", status_code=204)

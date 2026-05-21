@@ -61,6 +61,20 @@ class BotManager:
             bot, _ = self._bots[token]
             await bot.delete_webhook()
 
+    async def send_message(self, token: str, chat_id: int, text: str) -> bool:
+        """Send an HTML message via the given bot. Returns False if bot is
+        not registered or Telegram rejects (e.g. user never /started the bot)."""
+        if token not in self._bots:
+            logger.warning("send_message: bot not registered")
+            return False
+        bot, _ = self._bots[token]
+        try:
+            await bot.send_message(chat_id=chat_id, text=text)
+            return True
+        except Exception as e:
+            logger.warning(f"send_message failed: {e}")
+            return False
+
     async def set_menu_button(self, token: str, text: str, url: str) -> None:
         """Pin the 'Open Mini App' button to the bottom-left of every chat with this bot.
 

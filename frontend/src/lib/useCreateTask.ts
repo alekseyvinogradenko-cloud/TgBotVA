@@ -26,6 +26,7 @@ export interface CreateTaskInput {
   description?: string | null;
   due_date?: string | null;
   priority: TaskPriority;
+  assignee_id?: string | null;
 }
 
 export function useCreateTask() {

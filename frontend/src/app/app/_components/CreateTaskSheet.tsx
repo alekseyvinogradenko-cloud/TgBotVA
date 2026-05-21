@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMyProjects } from "@/lib/useTmaProjects";
 import { useParseTask, useCreateTask } from "@/lib/useCreateTask";
+import { useMembers, avatarColor } from "@/lib/useMembers";
 import type { TaskPriority } from "@/lib/useTmaTasks";
 import { getTelegram } from "@/lib/telegram";
 
@@ -24,9 +25,11 @@ export function CreateTaskSheet({ open, onClose, onCreated }: Props) {
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [projectId, setProjectId] = useState<string | null>(null);
+  const [assigneeId, setAssigneeId] = useState<string | null>(null); // null = self
   const [parsedOnce, setParsedOnce] = useState(false);
 
   const projectsQuery = useMyProjects(open);
+  const membersQuery = useMembers(open);
   const parseMutation = useParseTask();
   const createMutation = useCreateTask();
 
@@ -45,6 +48,7 @@ export function CreateTaskSheet({ open, onClose, onCreated }: Props) {
       setDueDate(null);
       setPriority("medium");
       setProjectId(null);
+      setAssigneeId(null);
       setParsedOnce(false);
       parseMutation.reset();
       createMutation.reset();
@@ -89,6 +93,7 @@ export function CreateTaskSheet({ open, onClose, onCreated }: Props) {
         title: title.trim(),
         due_date: dueDate,
         priority,
+        assignee_id: assigneeId,
       });
       onCreated();
       onClose();
@@ -309,6 +314,50 @@ export function CreateTaskSheet({ open, onClose, onCreated }: Props) {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Assignee picker — only when workspace has >1 member */}
+              {membersQuery.data && membersQuery.data.length > 1 && (
+                <>
+                  <div style={{ height: 12 }} />
+                  <label style={labelStyle}>Исполнитель</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {membersQuery.data.map((m) => {
+                      const selected =
+                        assigneeId === m.id || (assigneeId === null && m.is_me);
+                      return (
+                        <button
+                          key={m.id}
+                          onClick={() => setAssigneeId(m.is_me ? null : m.id)}
+                          style={{
+                            ...chipStyle,
+                            background: selected ? "#6ab2f2" : "#2a2c33",
+                            color: selected ? "#fff" : "#c0c2c7",
+                            fontWeight: selected ? 600 : 400,
+                          }}
+                        >
+                          <span
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: "50%",
+                              background: avatarColor(m.id),
+                              color: "#fff",
+                              fontSize: 8,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              fontWeight: 600,
+                            }}
+                          >
+                            {m.initials}
+                          </span>
+                          {m.is_me ? "Себе" : m.first_name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
               )}
 
               {createMutation.isError && (
