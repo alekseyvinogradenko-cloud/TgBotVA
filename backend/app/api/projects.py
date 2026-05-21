@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import TmaSession, get_tma_session, require_role
 from app.db.session import get_db
 from app.db.models import Project, UserRole
-from app.db.repositories import ProjectRepository
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 

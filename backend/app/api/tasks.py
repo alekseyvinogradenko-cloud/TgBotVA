@@ -14,7 +14,6 @@ from app.bots.manager import bot_manager
 from app.core.limiter import limiter
 from app.db.session import get_db
 from app.db.models import Note, Project, Task, TaskStatus, TaskPriority, User, Workspace
-from app.db.repositories import TaskRepository, ProjectRepository
 from app.services.ai_service import parse_task_from_text
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
