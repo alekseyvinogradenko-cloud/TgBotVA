@@ -1,4 +1,5 @@
-"""Telegram webhook router — one endpoint per bot token."""
+"""Telegram webhook router — one opaque endpoint per bot."""
+import hmac
 import logging
 
 from fastapi import APIRouter, HTTPException, Request, Header
@@ -10,18 +11,26 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/webhook/{bot_token}")
+@router.post("/webhook/{webhook_id}")
 async def telegram_webhook(
-    bot_token: str,
+    webhook_id: str,
     request: Request,
     x_telegram_bot_api_secret_token: str = Header(None),
 ):
-    if x_telegram_bot_api_secret_token != settings.webhook_secret:
+    # Timing-safe secret comparison
+    if not hmac.compare_digest(
+        x_telegram_bot_api_secret_token or "", settings.webhook_secret
+    ):
         raise HTTPException(status_code=403, detail="Invalid secret")
+
+    # Resolve opaque id → real bot token (token never appears in the URL/logs)
+    token = bot_manager.token_for_webhook_id(webhook_id)
+    if not token:
+        raise HTTPException(status_code=404, detail="Unknown webhook")
 
     update_data = await request.json()
     try:
-        await bot_manager.process_update(bot_token, update_data)
+        await bot_manager.process_update(token, update_data)
     except Exception as e:
-        logger.exception(f"Error processing update: {e}")
+        logger.exception(f"Error processing update: {type(e).__name__}")
     return {"ok": True}

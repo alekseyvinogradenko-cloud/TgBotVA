@@ -1,5 +1,5 @@
 """Task handlers — create, list, view, update, delete, subtasks, notes, digest."""
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from aiogram import Router, F
@@ -250,7 +250,7 @@ async def mark_task_done(callback: CallbackQuery, workspace_id: str, state: FSMC
         task = await task_repo.get(UUID(task_id))
         if task:
             task.status = TaskStatus.DONE
-            task.completed_at = datetime.utcnow()
+            task.completed_at = datetime.now(timezone.utc)
             await session.commit()
     await callback.answer("✅ Задача выполнена!")
     await show_my_tasks(callback, workspace_id=workspace_id, state=state)
@@ -421,10 +421,10 @@ async def show_today_digest(callback: CallbackQuery, workspace_id: str):
         task_repo = TaskRepository(session)
         tasks = await task_repo.get_user_tasks(user.id, UUID(workspace_id))
 
-    today_end = datetime.utcnow().replace(hour=23, minute=59, second=59)
+    today_end = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)
     today_tasks = [t for t in tasks if t.due_date and t.due_date <= today_end]
-    overdue = [t for t in today_tasks if t.due_date < datetime.utcnow()]
-    due_today = [t for t in today_tasks if t.due_date >= datetime.utcnow()]
+    overdue = [t for t in today_tasks if t.due_date < datetime.now(timezone.utc)]
+    due_today = [t for t in today_tasks if t.due_date >= datetime.now(timezone.utc)]
 
     if not today_tasks:
         text = f"☀️ <b>Дайджест на сегодня</b>\n\nНет задач на сегодня 🎉\n\nВсего активных: {len(tasks)}"

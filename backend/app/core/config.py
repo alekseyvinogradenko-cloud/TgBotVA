@@ -7,9 +7,10 @@ class Settings(BaseSettings):
 
     # App
     environment: str = "development"
-    debug: bool = True
+    debug: bool = False  # default off — opt in via DEBUG=true (prevents SQL/PII echo in prod logs)
     secret_key: str
     frontend_url: str = "http://localhost:3000"
+    admin_api_key: str = ""  # required header to register workspaces; empty = endpoint disabled
 
     # Database
     database_url: str

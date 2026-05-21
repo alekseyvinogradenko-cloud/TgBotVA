@@ -4,8 +4,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.db.session import engine
 from app.db.models import Base
 from app.api import webhooks, workspaces, tasks, projects, auth, settings as settings_api
@@ -20,6 +23,14 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting up...")
+    if settings.environment == "production":
+        if settings.webhook_secret in ("", "webhook-secret"):
+            logger.warning(
+                "SECURITY: WEBHOOK_SECRET is unset or the weak default — "
+                "set a strong random value in the environment."
+            )
+        if settings.debug:
+            logger.warning("SECURITY: DEBUG is enabled in production — SQL/PII will be logged.")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -36,7 +47,8 @@ async def lifespan(app: FastAPI):
         for ws in workspaces_list:
             try:
                 await bot_manager.register_bot(ws.telegram_bot_token, str(ws.id))
-                webhook_url = f"{settings.webhook_base_url}/webhook/{ws.telegram_bot_token}"
+                from app.bots.manager import webhook_id_for
+                webhook_url = f"{settings.webhook_base_url}/webhook/{webhook_id_for(ws.telegram_bot_token)}"
                 await bot_manager.set_webhook(ws.telegram_bot_token, webhook_url, settings.webhook_secret)
                 logger.info(f"Loaded bot and set webhook for workspace: {ws.name}")
 
@@ -75,6 +87,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Rate limiting (slowapi)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,

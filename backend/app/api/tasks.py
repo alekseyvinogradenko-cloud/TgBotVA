@@ -3,14 +3,15 @@ from datetime import datetime, timezone
 from uuid import UUID
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import TmaSession, get_tma_session
 from app.bots.manager import bot_manager
+from app.core.limiter import limiter
 from app.db.session import get_db
 from app.db.models import Note, Project, Task, TaskStatus, TaskPriority, User, Workspace
 from app.db.repositories import TaskRepository, ProjectRepository
@@ -56,40 +57,6 @@ async def _assert_member(db: AsyncSession, workspace_id: UUID, user_id: Optional
         raise HTTPException(400, "Assignee is not a member of this workspace")
 
 
-class TaskCreate(BaseModel):
-    project_id: UUID
-    parent_id: Optional[UUID] = None
-    title: str
-    description: Optional[str] = None
-    priority: TaskPriority = TaskPriority.MEDIUM
-    due_date: Optional[datetime] = None
-    assignee_id: Optional[UUID] = None
-
-
-class TaskUpdate(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
-    status: Optional[TaskStatus] = None
-    priority: Optional[TaskPriority] = None
-    due_date: Optional[datetime] = None
-    assignee_id: Optional[UUID] = None
-
-
-class TaskResponse(BaseModel):
-    id: UUID
-    project_id: UUID
-    parent_id: Optional[UUID]
-    title: str
-    description: Optional[str]
-    status: TaskStatus
-    priority: TaskPriority
-    due_date: Optional[datetime]
-    completed_at: Optional[datetime]
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 # ─── TMA Mini App models ──────────────────────────────────────────────────────
 
 class ProjectMini(BaseModel):
@@ -126,7 +93,7 @@ def _initials(first_name: str, last_name: Optional[str]) -> str:
 # ─── Parse free-text via AI ───────────────────────────────────────────────────
 
 class ParseTaskRequest(BaseModel):
-    text: str
+    text: str = Field(..., min_length=1, max_length=2000)
 
 
 class ParseTaskResponse(BaseModel):
@@ -138,7 +105,9 @@ class ParseTaskResponse(BaseModel):
 
 
 @router.post("/parse", response_model=ParseTaskResponse)
+@limiter.limit("15/minute")
 async def parse_task_text(
+    request: Request,
     body: ParseTaskRequest,
     session: TmaSession = Depends(get_tma_session),
 ):
@@ -170,11 +139,11 @@ async def parse_task_text(
 
 class TmaCreateTaskRequest(BaseModel):
     project_id: UUID
-    title: str
-    description: Optional[str] = None
+    title: str = Field(..., min_length=1, max_length=512)
+    description: Optional[str] = Field(None, max_length=4000)
     due_date: Optional[datetime] = None
     priority: TaskPriority = TaskPriority.MEDIUM
-    assignee_id: Optional[UUID] = None  # default = creator (Stage 5 wires picker)
+    assignee_id: Optional[UUID] = None
 
 
 @router.post("/create", response_model=TaskListItem, status_code=201)
@@ -381,8 +350,8 @@ async def set_task_status(
 
 
 class TaskEdit(BaseModel):
-    title: Optional[str] = None
-    description: Optional[str] = None
+    title: Optional[str] = Field(None, max_length=512)
+    description: Optional[str] = Field(None, max_length=4000)
     due_date: Optional[datetime] = None
     priority: Optional[TaskPriority] = None
     assignee_id: Optional[UUID] = None
@@ -432,7 +401,7 @@ async def delete_task_tma(
 
 
 class SubtaskCreate(BaseModel):
-    title: str
+    title: str = Field(..., min_length=1, max_length=512)
 
 
 @router.post("/{task_id}/subtask", response_model=SubtaskItem, status_code=201)
@@ -457,7 +426,7 @@ async def add_subtask(
 
 
 class NoteCreate(BaseModel):
-    content: str
+    content: str = Field(..., min_length=1, max_length=4000)
 
 
 @router.post("/{task_id}/note", response_model=NoteItem, status_code=201)
@@ -479,62 +448,6 @@ async def add_note(
     return NoteItem(id=note.id, content=note.content, created_at=note.created_at)
 
 
-@router.get("/workspace/{workspace_id}")
-async def get_workspace_tasks(
-    workspace_id: UUID,
-    status: Optional[TaskStatus] = None,
-    db: AsyncSession = Depends(get_db),
-) -> list[TaskResponse]:
-    from sqlalchemy import select
-    from app.db.models import Project
-
-    q = select(Task).join(Project).where(Project.workspace_id == workspace_id)
-    if status:
-        q = q.where(Task.status == status)
-    q = q.order_by(Task.due_date.nulls_last(), Task.created_at.desc())
-    result = await db.execute(q)
-    return list(result.scalars().all())
-
-
-@router.post("/", response_model=TaskResponse, status_code=201)
-async def create_task(
-    body: TaskCreate,
-    db: AsyncSession = Depends(get_db),
-):
-    repo = TaskRepository(db)
-    task = Task(**body.model_dump())
-    task = await repo.save(task)
-    await db.commit()
-    await db.refresh(task)
-    return task
-
-
-@router.patch("/{task_id}", response_model=TaskResponse)
-async def update_task(
-    task_id: UUID,
-    body: TaskUpdate,
-    db: AsyncSession = Depends(get_db),
-):
-    repo = TaskRepository(db)
-    task = await repo.get(task_id)
-    if not task:
-        raise HTTPException(404, "Task not found")
-
-    for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(task, field, value)
-    if body.status == TaskStatus.DONE and not task.completed_at:
-        task.completed_at = datetime.utcnow()
-
-    await db.commit()
-    await db.refresh(task)
-    return task
-
-
-@router.delete("/{task_id}", status_code=204)
-async def delete_task(task_id: UUID, db: AsyncSession = Depends(get_db)):
-    repo = TaskRepository(db)
-    task = await repo.get(task_id)
-    if not task:
-        raise HTTPException(404, "Task not found")
-    await repo.delete(task)
-    await db.commit()
+# Legacy unauthenticated endpoints (GET /workspace/{id}, POST /, PATCH /{id},
+# DELETE /{id}) were removed — they allowed public CRUD on any workspace's data.
+# The Mini App uses the TMA-authed, workspace-scoped endpoints above.

@@ -11,10 +11,12 @@ Flow:
 import logging
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.limiter import limiter
 
 from app.core.security import (
     create_access_token,
@@ -42,7 +44,9 @@ class TelegramAuthResponse(BaseModel):
 
 
 @router.post("/telegram", response_model=TelegramAuthResponse)
+@limiter.limit("20/minute")
 async def authenticate_telegram(
+    request: Request,
     body: TelegramAuthRequest,
     db: AsyncSession = Depends(get_db),
 ):

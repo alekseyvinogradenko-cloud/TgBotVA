@@ -3,8 +3,10 @@ Multi-bot manager.
 Each workspace registers its own Telegram bot token.
 All bots share one FastAPI app via webhook routing.
 """
+import hashlib
+import hmac
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -17,9 +19,16 @@ from app.bots.handlers import register_all_handlers
 logger = logging.getLogger(__name__)
 
 
+def webhook_id_for(token: str) -> str:
+    """Opaque, stable id for a bot — keeps the raw token out of the webhook URL
+    (and thus out of access logs). Not reversible without the token."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:32]
+
+
 class BotManager:
     def __init__(self):
         self._bots: Dict[str, tuple[Bot, Dispatcher]] = {}
+        self._id_to_token: Dict[str, str] = {}  # webhook_id -> token
 
     async def register_bot(self, token: str, workspace_id: str) -> Bot:
         if token in self._bots:
@@ -35,8 +44,13 @@ class BotManager:
         register_all_handlers(dp)
 
         self._bots[token] = (bot, dp)
+        self._id_to_token[webhook_id_for(token)] = token
         logger.info(f"Registered bot for workspace {workspace_id}")
         return bot
+
+    def token_for_webhook_id(self, webhook_id: str) -> Optional[str]:
+        """Resolve an opaque webhook id back to its bot token (timing-safe-ish lookup)."""
+        return self._id_to_token.get(webhook_id)
 
     async def process_update(self, token: str, update_data: dict) -> None:
         if token not in self._bots:

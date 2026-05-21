@@ -12,7 +12,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.db.models import User, Workspace, WorkspaceMember, UserRole, WorkspaceType
 from app.db.repositories import WorkspaceRepository, UserRepository
-from app.bots.manager import bot_manager
+from app.bots.manager import bot_manager, webhook_id_for
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -76,7 +76,20 @@ class WorkspaceResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-@router.post("/", response_model=WorkspaceResponse)
+import hmac as _hmac
+from fastapi import Header
+
+
+def _require_admin(x_admin_key: str = Header(None)):
+    """Gate workspace registration behind a server-side admin key.
+    If ADMIN_API_KEY is unset, the endpoint is disabled entirely (403)."""
+    if not settings.admin_api_key:
+        raise HTTPException(403, "Workspace registration disabled")
+    if not x_admin_key or not _hmac.compare_digest(x_admin_key, settings.admin_api_key):
+        raise HTTPException(403, "Invalid admin key")
+
+
+@router.post("/", response_model=WorkspaceResponse, dependencies=[Depends(_require_admin)])
 async def create_workspace(
     body: CreateWorkspaceRequest,
     db: AsyncSession = Depends(get_db),
@@ -105,8 +118,8 @@ async def create_workspace(
     # Update bot manager with real workspace id
     bot_manager._bots[body.telegram_bot_token][1]["workspace_id"] = str(workspace.id)
 
-    # Set webhook
-    webhook_url = f"{settings.webhook_base_url}/webhook/{body.telegram_bot_token}"
+    # Set webhook (opaque id, not the raw token)
+    webhook_url = f"{settings.webhook_base_url}/webhook/{webhook_id_for(body.telegram_bot_token)}"
     await bot_manager.set_webhook(
         body.telegram_bot_token, webhook_url, settings.webhook_secret
     )
@@ -129,45 +142,20 @@ async def create_workspace(
 
 
 @router.get("/", response_model=list[WorkspaceResponse])
-async def list_workspaces(db: AsyncSession = Depends(get_db)):
-    from sqlalchemy import select
-    result = await db.execute(select(Workspace).where(Workspace.is_active == True))
+async def list_workspaces(
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return only workspaces the caller is a member of."""
+    result = await db.execute(
+        select(Workspace)
+        .join(WorkspaceMember, WorkspaceMember.workspace_id == Workspace.id)
+        .where(WorkspaceMember.user_id == session.user.id)
+        .where(Workspace.is_active == True)  # noqa: E712
+    )
     return list(result.scalars().all())
 
 
-class MemberResponse(BaseModel):
-    id: str
-    role: str
-    user: dict
-
-    model_config = {"from_attributes": True}
-
-
-@router.get("/{workspace_id}/members")
-async def get_workspace_members(
-    workspace_id: UUID,
-    db: AsyncSession = Depends(get_db),
-):
-    from sqlalchemy import select
-    from sqlalchemy.orm import selectinload
-    from app.db.models import User
-
-    result = await db.execute(
-        select(WorkspaceMember)
-        .options(selectinload(WorkspaceMember.user))
-        .where(WorkspaceMember.workspace_id == workspace_id)
-    )
-    members = result.scalars().all()
-    return [
-        {
-            "id": str(m.id),
-            "role": m.role.value,
-            "user": {
-                "id": str(m.user.id),
-                "first_name": m.user.first_name,
-                "last_name": m.user.last_name,
-                "telegram_username": m.user.telegram_username,
-            },
-        }
-        for m in members
-    ]
+# Note: the public GET /{workspace_id}/members endpoint was removed (leaked PII
+# of any workspace by UUID). The Mini App uses the TMA-authed GET /members above,
+# which scopes to the caller's own workspace.

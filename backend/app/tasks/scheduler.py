@@ -2,7 +2,7 @@
 APScheduler tasks: morning digest, deadline reminders, weekly report.
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -29,7 +29,7 @@ async def send_morning_digest():
         for user in users:
             try:
                 # Get user's tasks due today or overdue
-                today_end = datetime.utcnow().replace(hour=23, minute=59, second=59)
+                today_end = datetime.now(timezone.utc).replace(hour=23, minute=59, second=59)
                 tasks_result = await session.execute(
                     select(Task)
                     .where(Task.assignee_id == user.id)
@@ -44,7 +44,7 @@ async def send_morning_digest():
 
                 lines = [f"☀️ <b>Доброе утро, {user.first_name}!</b>\n\nЗадачи на сегодня:\n"]
                 for task in tasks[:10]:
-                    icon = "🔴" if task.due_date < datetime.utcnow() else "📋"
+                    icon = "🔴" if task.due_date < datetime.now(timezone.utc) else "📋"
                     due = task.due_date.strftime("%H:%M") if task.due_date else ""
                     lines.append(f"{icon} {task.title} {due}")
 
@@ -74,7 +74,7 @@ async def send_deadline_reminders():
     """Check and send deadline reminders."""
     logger.info("Running deadline reminder job")
     async with AsyncSessionLocal() as session:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         soon = now + timedelta(hours=24)
 
         result = await session.execute(

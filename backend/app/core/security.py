@@ -19,7 +19,7 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 JWT_ALGORITHM = "HS256"
-JWT_EXPIRE_HOURS = 24 * 7  # 1 week — TG sessions are typically long-lived
+JWT_EXPIRE_HOURS = 24  # short-lived; membership is re-checked per request anyway
 INIT_DATA_MAX_AGE_SECONDS = 24 * 60 * 60  # reject initData older than 24h (replay protection)
 
 
@@ -57,16 +57,18 @@ def verify_telegram_init_data(init_data: str, bot_token: str) -> Optional[dict]:
     if not hmac.compare_digest(computed_hash, received_hash):
         return None
 
-    # Replay protection
+    # Replay protection — auth_date is mandatory (a forged blob omitting it
+    # must not bypass the freshness window)
     auth_date = parsed.get("auth_date")
-    if auth_date:
-        try:
-            age = datetime.now(timezone.utc).timestamp() - int(auth_date)
-            if age > INIT_DATA_MAX_AGE_SECONDS:
-                logger.warning(f"initData rejected — too old ({age:.0f}s)")
-                return None
-        except ValueError:
+    if not auth_date:
+        return None
+    try:
+        age = datetime.now(timezone.utc).timestamp() - int(auth_date)
+        if age > INIT_DATA_MAX_AGE_SECONDS:
+            logger.warning(f"initData rejected — too old ({age:.0f}s)")
             return None
+    except ValueError:
+        return None
 
     return parsed
 
