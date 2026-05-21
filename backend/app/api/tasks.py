@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import TmaSession, get_tma_session
 from app.db.session import get_db
-from app.db.models import Project, Task, TaskStatus, TaskPriority, User
+from app.db.models import Note, Project, Task, TaskStatus, TaskPriority, User
 from app.db.repositories import TaskRepository, ProjectRepository
 from app.services.ai_service import parse_task_from_text
 
@@ -233,6 +233,196 @@ async def get_my_tasks(
             )
         )
     return items
+
+
+# ─── Task detail + mutations (TMA-authed, scope-checked) ──────────────────────
+
+class NoteItem(BaseModel):
+    id: UUID
+    content: str
+    created_at: datetime
+
+
+class SubtaskItem(BaseModel):
+    id: UUID
+    title: str
+    status: TaskStatus
+
+
+class TaskDetail(BaseModel):
+    id: UUID
+    title: str
+    description: Optional[str]
+    status: TaskStatus
+    priority: TaskPriority
+    due_date: Optional[datetime]
+    is_overdue: bool
+    project: ProjectMini
+    assignee: Optional[AssigneeMini]
+    subtasks: list[SubtaskItem]
+    notes: list[NoteItem]
+
+
+async def _owned_task(task_id: UUID, session: TmaSession, db: AsyncSession) -> Task:
+    """Fetch a task and assert it belongs to the caller's workspace.
+    Returns 404 (not 403) so we don't leak existence of other-workspace tasks."""
+    task = await db.get(Task, task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    project = await db.get(Project, task.project_id)
+    if not project or project.workspace_id != session.workspace_id:
+        raise HTTPException(404, "Task not found")
+    return task
+
+
+@router.get("/{task_id}", response_model=TaskDetail)
+async def get_task_detail(
+    task_id: UUID,
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    await _owned_task(task_id, session, db)
+    result = await db.execute(
+        select(Task)
+        .options(
+            selectinload(Task.subtasks),
+            selectinload(Task.notes),
+            selectinload(Task.assignee),
+            selectinload(Task.project),
+        )
+        .where(Task.id == task_id)
+    )
+    task = result.scalar_one()
+    now = datetime.now(timezone.utc)
+    return TaskDetail(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        status=task.status,
+        priority=task.priority,
+        due_date=task.due_date,
+        is_overdue=bool(task.due_date and task.due_date < now and task.status != TaskStatus.DONE),
+        project=ProjectMini(id=task.project.id, name=task.project.name, color=task.project.color),
+        assignee=AssigneeMini(
+            id=task.assignee.id,
+            first_name=task.assignee.first_name,
+            initials=_initials(task.assignee.first_name, task.assignee.last_name),
+        ) if task.assignee else None,
+        subtasks=[
+            SubtaskItem(id=s.id, title=s.title, status=s.status)
+            for s in sorted(task.subtasks, key=lambda x: x.created_at or now)
+        ],
+        notes=[
+            NoteItem(id=n.id, content=n.content, created_at=n.created_at)
+            for n in sorted(task.notes, key=lambda x: x.created_at or now)
+        ],
+    )
+
+
+class StatusUpdate(BaseModel):
+    status: TaskStatus
+
+
+@router.post("/{task_id}/status", status_code=204)
+async def set_task_status(
+    task_id: UUID,
+    body: StatusUpdate,
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    task = await _owned_task(task_id, session, db)
+    task.status = body.status
+    if body.status == TaskStatus.DONE:
+        task.completed_at = datetime.now(timezone.utc)
+    elif task.completed_at:
+        task.completed_at = None
+    await db.commit()
+
+
+class TaskEdit(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    due_date: Optional[datetime] = None
+    priority: Optional[TaskPriority] = None
+
+
+@router.post("/{task_id}/update", status_code=204)
+async def edit_task(
+    task_id: UUID,
+    body: TaskEdit,
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    task = await _owned_task(task_id, session, db)
+    data = body.model_dump(exclude_unset=True)
+    if "title" in data and data["title"]:
+        task.title = data["title"].strip()[:512]
+    if "description" in data:
+        task.description = data["description"]
+    if "due_date" in data:
+        task.due_date = data["due_date"]
+    if "priority" in data and data["priority"]:
+        task.priority = data["priority"]
+    await db.commit()
+
+
+@router.post("/{task_id}/delete", status_code=204)
+async def delete_task_tma(
+    task_id: UUID,
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    task = await _owned_task(task_id, session, db)
+    await db.delete(task)
+    await db.commit()
+
+
+class SubtaskCreate(BaseModel):
+    title: str
+
+
+@router.post("/{task_id}/subtask", response_model=SubtaskItem, status_code=201)
+async def add_subtask(
+    task_id: UUID,
+    body: SubtaskCreate,
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    parent = await _owned_task(task_id, session, db)
+    subtask = Task(
+        project_id=parent.project_id,
+        parent_id=parent.id,
+        creator_id=session.user.id,
+        assignee_id=parent.assignee_id or session.user.id,
+        title=body.title.strip()[:512],
+    )
+    db.add(subtask)
+    await db.commit()
+    await db.refresh(subtask)
+    return SubtaskItem(id=subtask.id, title=subtask.title, status=subtask.status)
+
+
+class NoteCreate(BaseModel):
+    content: str
+
+
+@router.post("/{task_id}/note", response_model=NoteItem, status_code=201)
+async def add_note(
+    task_id: UUID,
+    body: NoteCreate,
+    session: TmaSession = Depends(get_tma_session),
+    db: AsyncSession = Depends(get_db),
+):
+    await _owned_task(task_id, session, db)
+    note = Note(
+        task_id=task_id,
+        user_id=session.user.id,
+        content=body.content.strip(),
+    )
+    db.add(note)
+    await db.commit()
+    await db.refresh(note)
+    return NoteItem(id=note.id, content=note.content, created_at=note.created_at)
 
 
 @router.get("/workspace/{workspace_id}")

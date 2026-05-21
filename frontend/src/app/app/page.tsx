@@ -10,7 +10,9 @@ import {
 import { authenticate, type AuthResponse } from "@/lib/tmaAuth";
 import { useMyTasks, type TmaTask } from "@/lib/useTmaTasks";
 import { useTgMainButton } from "@/lib/useTgMainButton";
+import { useSetStatus } from "@/lib/useTaskDetail";
 import { CreateTaskSheet } from "./_components/CreateTaskSheet";
+import { TaskDetailScreen } from "./_components/TaskDetailScreen";
 
 type Status = "loading" | "ready" | "error";
 
@@ -155,14 +157,14 @@ function TaskBoard({
   }, [tasks]);
   const overdueCount = tasks.filter((t) => t.is_overdue).length;
 
-  // Sheet for new-task flow
+  // Sheet for new-task flow + detail screen navigation
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  // TG MainButton — opens create-task flow (hides while sheet is open since
-  // the sheet has its own Save/Cancel footer)
+  // TG MainButton — opens create-task flow. Hidden while sheet or detail is open.
   useTgMainButton({
     text: "+ Новая задача",
-    visible: !sheetOpen,
+    visible: !sheetOpen && !selectedTaskId,
     onClick: () => {
       const tg = getTelegram();
       tg?.HapticFeedback?.impactOccurred("light");
@@ -245,17 +247,22 @@ function TaskBoard({
         )}
 
         {/* Featured urgent card */}
-        {featured && <UrgentCard task={featured} onRefresh={refetch} />}
+        {featured && <UrgentCard task={featured} onOpen={setSelectedTaskId} />}
 
         {/* Regular task cards (excluding featured) */}
         <div style={{ padding: "0 14px" }}>
           {filteredTasks
             .filter((t) => t.id !== featured?.id)
             .map((t) => (
-              <TaskCard key={t.id} task={t} />
+              <TaskCard key={t.id} task={t} onOpen={setSelectedTaskId} />
             ))}
         </div>
       </div>
+
+      {/* Task detail screen (overlay) */}
+      {selectedTaskId && (
+        <TaskDetailScreen taskId={selectedTaskId} onClose={() => setSelectedTaskId(null)} />
+      )}
 
       <CreateTaskSheet
         open={sheetOpen}
@@ -301,15 +308,18 @@ function TaskBoard({
 
 // ─── Components ───────────────────────────────────────────────────────────────
 
-function UrgentCard({ task, onRefresh }: { task: TmaTask; onRefresh: () => void }) {
+function UrgentCard({ task, onOpen }: { task: TmaTask; onOpen: (id: string) => void }) {
   const formatted = formatDueRelative(task.due_date);
   const isOverdue = task.is_overdue;
+  const setStatus = useSetStatus(task.id);
 
   return (
     <div
+      onClick={() => onOpen(task.id)}
       style={{
         margin: "0 14px 10px",
         padding: 14,
+        cursor: "pointer",
         background: isOverdue
           ? "linear-gradient(135deg,#3d1417,#5c1d22)"
           : "linear-gradient(135deg,#3d2814,#5c3d1d)",
@@ -343,18 +353,20 @@ function UrgentCard({ task, onRefresh }: { task: TmaTask; onRefresh: () => void 
       <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
         <button
           style={btnStyle("rgba(255,255,255,0.12)", "#fff", 600)}
-          onClick={() => {
-            getTelegram()?.HapticFeedback?.impactOccurred("medium");
-            alert("Wire-up в Stage 4");
+          onClick={(e) => {
+            e.stopPropagation();
+            getTelegram()?.HapticFeedback?.notificationOccurred("success");
+            setStatus.mutate("done");
           }}
         >
-          ✓ Готово
+          {setStatus.isPending ? "…" : "✓ Готово"}
         </button>
         <button
           style={btnStyle("rgba(255,255,255,0.06)", "#fff", 400)}
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             getTelegram()?.HapticFeedback?.impactOccurred("light");
-            alert("Wire-up в Stage 4");
+            onOpen(task.id);
           }}
         >
           Перенести
@@ -364,17 +376,19 @@ function UrgentCard({ task, onRefresh }: { task: TmaTask; onRefresh: () => void 
   );
 }
 
-function TaskCard({ task }: { task: TmaTask }) {
+function TaskCard({ task, onOpen }: { task: TmaTask; onOpen: (id: string) => void }) {
   const inProgress = task.status === "in_progress";
   const projectColor = task.project.color || "#6e6e76";
 
   return (
     <div
+      onClick={() => onOpen(task.id)}
       style={{
         margin: "0 0 8px",
         padding: "13px 14px",
         background: "#22232a",
         borderRadius: 14,
+        cursor: "pointer",
         borderLeft: inProgress ? "3px solid #6ab2f2" : "3px solid transparent",
       }}
     >
