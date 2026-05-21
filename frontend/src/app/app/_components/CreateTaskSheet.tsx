@@ -5,6 +5,7 @@ import { useParseTask, useCreateTask } from "@/lib/useCreateTask";
 import { useMembers, avatarColor } from "@/lib/useMembers";
 import type { TaskPriority } from "@/lib/useTmaTasks";
 import { getTelegram } from "@/lib/telegram";
+import { useTgBackButton } from "@/lib/useTgBackButton";
 
 type Props = {
   open: boolean;
@@ -32,6 +33,8 @@ export function CreateTaskSheet({ open, onClose, onCreated }: Props) {
   const membersQuery = useMembers(open);
   const parseMutation = useParseTask();
   const createMutation = useCreateTask();
+
+  useTgBackButton(open, onClose);
 
   // Auto-select first project once projects load
   useEffect(() => {

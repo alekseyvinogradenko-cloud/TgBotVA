@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { getTelegram } from "@/lib/telegram";
+import { useTgBackButton } from "@/lib/useTgBackButton";
 import {
   useMyProjects,
   useCreateProject,
@@ -19,6 +20,8 @@ export function ProjectsSheet({ open, onClose }: { open: boolean; onClose: () =>
 
   const [name, setName] = useState("");
   const [color, setColor] = useState(COLORS[0]);
+
+  useTgBackButton(open, onClose);
 
   useEffect(() => {
     if (!open) {

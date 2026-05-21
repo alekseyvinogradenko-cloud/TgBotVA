@@ -14,6 +14,7 @@ import { useSetStatus } from "@/lib/useTaskDetail";
 import { CreateTaskSheet } from "./_components/CreateTaskSheet";
 import { TaskDetailScreen } from "./_components/TaskDetailScreen";
 import { ProjectsSheet } from "./_components/ProjectsSheet";
+import { SettingsSheet } from "./_components/SettingsSheet";
 
 type Status = "loading" | "ready" | "error";
 
@@ -161,12 +162,15 @@ function TaskBoard({
   // Sheet for new-task flow + detail screen navigation
   const [sheetOpen, setSheetOpen] = useState(false);
   const [projectsOpen, setProjectsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+
+  const anyOverlay = sheetOpen || projectsOpen || settingsOpen || !!selectedTaskId;
 
   // TG MainButton — opens create-task flow. Hidden while any sheet/detail is open.
   useTgMainButton({
     text: "+ Новая задача",
-    visible: !sheetOpen && !selectedTaskId && !projectsOpen,
+    visible: !anyOverlay,
     onClick: () => {
       const tg = getTelegram();
       tg?.HapticFeedback?.impactOccurred("light");
@@ -231,31 +235,35 @@ function TaskBoard({
             )}
           </div>
           </div>
-          <button
-            onClick={() => {
-              getTelegram()?.HapticFeedback?.impactOccurred("light");
-              setProjectsOpen(true);
-            }}
-            style={{
-              flexShrink: 0,
-              width: 38,
-              height: 38,
-              borderRadius: 10,
-              background: "#22232a",
-              border: "none",
-              color: "#fff",
-              fontSize: 18,
-              cursor: "pointer",
-            }}
-            aria-label="Проекты"
-          >
-            📁
-          </button>
+          <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+            <button
+              onClick={() => {
+                getTelegram()?.HapticFeedback?.impactOccurred("light");
+                setProjectsOpen(true);
+              }}
+              style={headerIconBtn}
+              aria-label="Проекты"
+            >
+              📁
+            </button>
+            <button
+              onClick={() => {
+                getTelegram()?.HapticFeedback?.impactOccurred("light");
+                setSettingsOpen(true);
+              }}
+              style={headerIconBtn}
+              aria-label="Настройки"
+            >
+              ⚙️
+            </button>
+          </div>
         </header>
 
         {loading && (
-          <div style={{ padding: "16px 18px", color: "#8b8d94", fontSize: 13 }}>
-            Загружаю задачи…
+          <div style={{ padding: "0 14px" }}>
+            {[0, 1, 2, 3].map((i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         )}
 
@@ -303,6 +311,8 @@ function TaskBoard({
       />
 
       <ProjectsSheet open={projectsOpen} onClose={() => setProjectsOpen(false)} />
+
+      <SettingsSheet open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Sticky project filter chips */}
       {projects.length > 0 && (
@@ -575,6 +585,43 @@ function btnStyle(bg: string, color: string, weight: number): React.CSSPropertie
     border: "none",
     cursor: "pointer",
   };
+}
+
+const headerIconBtn: React.CSSProperties = {
+  width: 38,
+  height: 38,
+  borderRadius: 10,
+  background: "#22232a",
+  border: "none",
+  color: "#fff",
+  fontSize: 18,
+  cursor: "pointer",
+};
+
+function SkeletonCard() {
+  return (
+    <div
+      style={{
+        margin: "0 0 8px",
+        padding: "13px 14px",
+        background: "#22232a",
+        borderRadius: 14,
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+      }}
+    >
+      <div style={{ width: 18, height: 18, borderRadius: "50%", background: "#2f3038" }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ height: 11, width: "70%", background: "#2f3038", borderRadius: 4 }} />
+        <div style={{ height: 9, width: "40%", background: "#2a2c33", borderRadius: 4, marginTop: 7 }} />
+      </div>
+      <style jsx>{`
+        div { animation: tma-pulse 1.2s ease-in-out infinite; }
+        @keyframes tma-pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+      `}</style>
+    </div>
+  );
 }
 
 const AVATAR_COLORS = ["#fb923c", "#06b6d4", "#a78bfa", "#f43f5e", "#22c55e", "#f59e0b"];

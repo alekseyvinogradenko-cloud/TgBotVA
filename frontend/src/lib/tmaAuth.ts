@@ -63,3 +63,17 @@ tmaApi.interceptors.request.use((config) => {
   }
   return config;
 });
+
+// On 401 (expired/revoked JWT) drop the token and reload so the page re-auths
+// from fresh Telegram initData. Guard against loops: only reload if we actually
+// had a token (i.e. it went stale), not on the very first unauthenticated call.
+tmaApi.interceptors.response.use(
+  (res) => res,
+  (error) => {
+    if (error?.response?.status === 401 && getStoredToken()) {
+      clearStoredToken();
+      if (typeof window !== "undefined") window.location.reload();
+    }
+    return Promise.reject(error);
+  },
+);

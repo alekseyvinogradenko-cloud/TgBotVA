@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.db.session import engine
 from app.db.models import Base
-from app.api import webhooks, workspaces, tasks, projects, auth
+from app.api import webhooks, workspaces, tasks, projects, auth, settings as settings_api
 from app.bots.manager import bot_manager
 from app.tasks.scheduler import setup_scheduler
 
@@ -89,6 +89,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(workspaces.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
+app.include_router(settings_api.router, prefix="/api")
 
 
 @app.get("/health")
