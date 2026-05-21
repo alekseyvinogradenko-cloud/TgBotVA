@@ -13,6 +13,7 @@ import { useTgMainButton } from "@/lib/useTgMainButton";
 import { useSetStatus } from "@/lib/useTaskDetail";
 import { CreateTaskSheet } from "./_components/CreateTaskSheet";
 import { TaskDetailScreen } from "./_components/TaskDetailScreen";
+import { ProjectsSheet } from "./_components/ProjectsSheet";
 
 type Status = "loading" | "ready" | "error";
 
@@ -159,12 +160,13 @@ function TaskBoard({
 
   // Sheet for new-task flow + detail screen navigation
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [projectsOpen, setProjectsOpen] = useState(false);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
-  // TG MainButton — opens create-task flow. Hidden while sheet or detail is open.
+  // TG MainButton — opens create-task flow. Hidden while any sheet/detail is open.
   useTgMainButton({
     text: "+ Новая задача",
-    visible: !sheetOpen && !selectedTaskId,
+    visible: !sheetOpen && !selectedTaskId && !projectsOpen,
     onClick: () => {
       const tg = getTelegram();
       tg?.HapticFeedback?.impactOccurred("light");
@@ -187,7 +189,16 @@ function TaskBoard({
       {/* Scrollable content */}
       <div style={{ flex: 1, overflowY: "auto", paddingBottom: 64 }}>
         {/* Greeting */}
-        <header style={{ padding: "18px 18px 14px" }}>
+        <header
+          style={{
+            padding: "18px 18px 14px",
+            display: "flex",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
+            gap: 12,
+          }}
+        >
+          <div style={{ minWidth: 0 }}>
           <h1
             style={{
               fontSize: 22,
@@ -219,6 +230,27 @@ function TaskBoard({
               </span>
             )}
           </div>
+          </div>
+          <button
+            onClick={() => {
+              getTelegram()?.HapticFeedback?.impactOccurred("light");
+              setProjectsOpen(true);
+            }}
+            style={{
+              flexShrink: 0,
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: "#22232a",
+              border: "none",
+              color: "#fff",
+              fontSize: 18,
+              cursor: "pointer",
+            }}
+            aria-label="Проекты"
+          >
+            📁
+          </button>
         </header>
 
         {loading && (
@@ -269,6 +301,8 @@ function TaskBoard({
         onClose={() => setSheetOpen(false)}
         onCreated={refetch}
       />
+
+      <ProjectsSheet open={projectsOpen} onClose={() => setProjectsOpen(false)} />
 
       {/* Sticky project filter chips */}
       {projects.length > 0 && (
